@@ -715,6 +715,37 @@ TEST_CASE_FIXTURE(Fixture, "hovering_over_comment_inside_anonymous_function_body
     CHECK_FALSE(result.has_value());
 }
 
+TEST_CASE_FIXTURE(Fixture, "method_call_hover_uses_resolved_generic_instantiation")
+{
+    auto [source, marker] = sourceWithMarker(R"(
+        local Class = {}
+        Class.__index = Class
+
+        type ClassData<T> = {
+            value: T,
+        }
+
+        export type Class<T> = setmetatable<ClassData<T>, typeof(Class)>
+
+        function Class.Get<T>(self: ClassData<T>): T
+            return self.value
+        end
+
+        local object: Class<string> = nil :: any
+        local value = object:G|et()
+    )");
+
+    auto uri = newDocument("foo.luau", source);
+
+    lsp::HoverParams params;
+    params.textDocument = lsp::TextDocumentIdentifier{uri};
+    params.position = marker;
+
+    auto result = workspace.hover(params, nullptr);
+    REQUIRE(result);
+    CHECK_EQ(result->contents.value, codeBlock("luau", FFlag::LuauSolverV2 ? "function ClassData:Get(self: ClassData<string>): string" : "any"));
+}
+
 TEST_CASE_FIXTURE(Fixture, "includes_documentation_for_base_table_member_of_setmetatable_type")
 {
     auto source = R"(

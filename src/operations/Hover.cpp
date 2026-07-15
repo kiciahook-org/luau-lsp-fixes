@@ -209,6 +209,21 @@ std::optional<lsp::Hover> WorkspaceFolder::hover(const lsp::HoverParams& params,
         // If so, and we are hovering over a prop, we want to give type info for the assigned expression to the prop
         // rather than just "string"
         auto ancestry = Luau::findAstAncestryOfPosition(*sourceModule, position);
+        // Calls can specialize a generic or overloaded property beyond its declared type.
+        if (ancestry.size() >= 2)
+        {
+            auto call = ancestry.at(ancestry.size() - 2)->as<Luau::AstExprCall>();
+            if (call && call->func == expr)
+            {
+                if (auto it = module->astOverloadResolvedTypes.find(call))
+                {
+                    auto resolvedType = Luau::follow(*it);
+                    if (Luau::get<Luau::FunctionType>(resolvedType))
+                        type = resolvedType;
+                }
+            }
+        }
+
         if (ancestry.size() >= 2 && ancestry.at(ancestry.size() - 2)->is<Luau::AstExprTable>())
         {
             auto parent = ancestry.at(ancestry.size() - 2)->as<Luau::AstExprTable>();
@@ -236,7 +251,7 @@ std::optional<lsp::Hover> WorkspaceFolder::hover(const lsp::HoverParams& params,
                 if (auto propInformation = lookupProp(parentType, indexName); !propInformation.empty())
                 {
                     auto [baseTy, prop] = propInformation[0];
-                    if (propInformation.size() == 1 && prop.readTy)
+                    if (!type && propInformation.size() == 1 && prop.readTy)
                         type = prop.readTy;
                     if (auto definitionModuleName = Luau::getDefinitionModuleName(baseTy))
                     {
