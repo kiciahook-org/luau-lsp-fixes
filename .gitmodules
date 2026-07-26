@@ -1,3 +1,4 @@
 [submodule "luau"]
 	path = luau
-	url = https://github.com/kiciahook/luau.git
+	url = https://github.com/kiciahook-org/luau-fixes.git
+	branch = fixes

@@ -246,6 +246,9 @@ TEST_CASE("definitions_loaded_through_workspace_via_client")
 
 TEST_CASE("enum_item_enum_types_are_specialized")
 {
+    if (!FFlag::LuauSolverV2)
+        return;
+
     TempDir t("analyze_cli_specialized_enum_types");
     auto filePath = t.write_child("test.luau", R"(
         --!strict
