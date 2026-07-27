@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Fixed definition-file generic functions with `keyof`/`index` parameter constraints reporting valid call arguments as unreachable.
 - Kept higher-order generic inference on the compatible primitive-literal and subtyping path when synchronized Studio flags stage those solver features separately.
 - Preserved refined metatable sibling fields, methods, and writable properties during new-solver type checking.
 - Made new-solver `rawget` infer concrete own properties, finite unions, and compatible indexers while excluding inherited metatable fields, non-tables, and extern values.
