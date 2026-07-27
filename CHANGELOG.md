@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Allowed generalized iteration over sealed records while preserving their known key and value types.
+- Fixed generic property access on intersected and large instance types reporting false property and complexity errors.
+- Fixed analyzer crashes while refining bound metatable-backed table types.
 - Preserved contextual table types when forwarding structured arguments through variadic higher-order calls.
 - Fixed definition-file generic functions with `keyof`/`index` parameter constraints reporting valid call arguments as unreachable.
 - Kept higher-order generic inference on the compatible primitive-literal and subtyping path when synchronized Studio flags stage those solver features separately.
