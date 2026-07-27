@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Fixed `getmetatable` on nil-refined `any` values reporting an uninhabited type function.
 - Allowed generalized iteration over sealed records while preserving their known key and value types.
 - Fixed generic property access on intersected and large instance types reporting false property and complexity errors.
 - Fixed analyzer crashes while refining bound metatable-backed table types.
