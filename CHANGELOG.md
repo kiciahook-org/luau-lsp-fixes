@@ -20,6 +20,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Kept higher-order generic inference on the compatible primitive-literal and subtyping path when synchronized Studio flags stage those solver features separately.
 - Preserved refined metatable sibling fields, methods, and writable properties during new-solver type checking.
 - Made new-solver `rawget` infer concrete own properties, finite unions, and compatible indexers while excluding inherited metatable fields, non-tables, and extern values.
+- Fixed `@self` string-require aliases resolving from the filesystem instead of the sourcemap tree for non-DataModel roots ([#1511](https://github.com/JohnnyMorganz/luau-lsp/issues/1511))
+
+### Changed
+
+- Sync to upstream Luau 0.731
 
 ## [1.69.0] - 2026-07-14
 
