@@ -1,8 +1,12 @@
 name: Release
 
+# NOTE (fork): the `push: tags` trigger is intentionally disabled on this
+# branch. This is upstream's release workflow and it requires secrets this
+# fork does not have (MARKETPLACE_TOKEN, OVSX_TOKEN, SENTRY_AUTH_TOKEN,
+# ROBLOX_API_KEY). Left on tags it would fail noisily and create a stray draft
+# release that collides with publish-fork-release.yml. Kept here for reference
+# and still runnable by hand.
 on:
-  push:
-    tags: ["*"]
   workflow_dispatch:
 
 env:
