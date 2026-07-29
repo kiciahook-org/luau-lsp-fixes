@@ -1,0 +1,204 @@
+name: Publish Fork Release
+
+# Builds the luau-lsp server for every supported platform and publishes them,
+# together with packaged .vsix extensions, as a GitHub release on this fork.
+#
+# Deliberately does NOT publish to the VS Code Marketplace, OpenVSX, Sentry or
+# Roblox: those all belong to the upstream project's identity and need secrets
+# this fork does not have. GITHUB_TOKEN is the only secret used here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v1.69.0-fixes.1). Created at the selected branch if it does not exist."
+        required: true
+        type: string
+  push:
+    tags: ["*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-fork-release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  MACOSX_DEPLOYMENT_TARGET: "10.15"
+
+jobs:
+  setup:
+    name: Resolve release tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - name: Resolve tag and version
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+
+          if [ -z "$TAG" ]; then
+            echo "::error::Could not determine a tag to release"
+            exit 1
+          fi
+
+          # Extension versions are plain x.y.z; strip a leading "v" from the tag.
+          VERSION="${TAG#v}"
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing tag '$TAG' (version '$VERSION')"
+
+  build:
+    name: Build ${{ matrix.artifact-name }}
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact-name: luau-lsp-win64
+            code-targets: "win32-x64 win32-arm64"
+          - os: ubuntu-22.04
+            artifact-name: luau-lsp-linux-x86_64
+            code-targets: "linux-x64"
+          - os: ubuntu-22.04-arm
+            artifact-name: luau-lsp-linux-arm64
+            code-targets: "linux-arm64"
+          - os: macos-latest
+            artifact-name: luau-lsp-macos
+            code-targets: "darwin-x64 darwin-arm64"
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # LSP_WERROR is left OFF on purpose: a release build should not fail
+      # because a newer compiler emitted a new warning.
+      - name: Build server
+        run: |
+          mkdir build && cd build
+          cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -DLSP_STATIC_CRT:BOOL=ON -DLSP_BUILD_WITH_SENTRY:BOOL=OFF -DLSP_WERROR:BOOL=OFF
+          cmake --build . --config RelWithDebInfo --target Luau.LanguageServer.CLI -j 3
+
+      - name: (macOS) Verify universal build
+        if: runner.os == 'macOS'
+        run: lipo -archs build/luau-lsp
+
+      - name: (macOS) Strip debug symbols
+        if: runner.os == 'macOS'
+        run: strip -S build/luau-lsp
+
+      - name: (Linux) Strip debug symbols
+        if: runner.os == 'Linux'
+        run: objcopy --strip-debug build/luau-lsp
+
+      - name: Create server archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist staging
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp build/RelWithDebInfo/luau-lsp.exe staging/
+            cd staging && 7z a "../dist/${{ matrix.artifact-name }}.zip" ./*
+          else
+            cp build/luau-lsp staging/
+            cd staging && zip "../dist/${{ matrix.artifact-name }}.zip" ./*
+          fi
+
+      - name: Copy server into extension
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p editors/code/bin
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp build/RelWithDebInfo/luau-lsp.exe editors/code/bin/server.exe
+          else
+            cp build/luau-lsp editors/code/bin/server
+            chmod +x editors/code/bin/server
+          fi
+
+      - name: Copy README, CHANGELOG, LICENSE into extension
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -f README.md editors/code/README.md
+          cp -f CHANGELOG.md editors/code/CHANGELOG.md
+          cp -f LICENSE.md editors/code/LICENSE
+
+      # vsce requires a plain x.y.z version. Tags carrying a prerelease suffix
+      # (e.g. v1.69.0-fixes.1) are left alone rather than failing the build.
+      - name: Sync extension version to tag
+        shell: bash
+        working-directory: editors/code
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.setup.outputs.version }}"
+          if printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            npm version "$VERSION" --no-git-tag-version --allow-same-version
+            echo "Extension version set to $VERSION"
+          else
+            echo "::warning::Tag version '$VERSION' is not a plain x.y.z; keeping package.json version"
+          fi
+
+      - name: Install extension dependencies
+        run: npm ci
+        working-directory: editors/code
+
+      - name: Package extension
+        shell: bash
+        working-directory: editors/code
+        run: |
+          set -euo pipefail
+          for target in ${{ matrix.code-targets }}; do
+            echo "Packaging $target"
+            npx @vscode/vsce package --target "$target" -o "../../dist/luau-lsp-$target.vsix"
+          done
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.artifact-name }}
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: release-*
+          merge-multiple: true
+
+      - name: List release assets
+        run: ls -lh artifacts
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.setup.outputs.tag }}
+          name: ${{ needs.setup.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          draft: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: artifacts/*
