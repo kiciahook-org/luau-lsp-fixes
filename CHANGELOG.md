@@ -13,6 +13,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Fixed generic property access on intersected and large instance types reporting false property and complexity errors.
 - Fixed analyzer crashes while refining bound metatable-backed table types.
 - Preserved contextual table types when forwarding structured arguments through variadic higher-order calls.
+- Preserved callback parameter context when earlier call arguments depend on deferred metatable property resolution.
+- Preserved nil refinements for short-circuit condition operands backed by loop-joined local definitions.
+- Prevented higher-order generic inference from retaining stale substitution keys after recursive type resolution.
 - Fixed definition-file generic functions with `keyof`/`index` parameter constraints reporting valid call arguments as unreachable.
 - Kept higher-order generic inference on the compatible primitive-literal and subtyping path when synchronized Studio flags stage those solver features separately.
 - Preserved refined metatable sibling fields, methods, and writable properties during new-solver type checking.
